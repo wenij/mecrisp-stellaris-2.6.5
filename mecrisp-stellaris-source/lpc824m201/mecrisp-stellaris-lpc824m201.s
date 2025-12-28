@@ -25,6 +25,7 @@
 @ -----------------------------------------------------------------------------
 
 .equ m0core, 1
+.equ color, 1
 
 @ .equ flash16bytesblockwrite, 1
 @ Not available:  .equ charkommaavailable, 1
