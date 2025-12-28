@@ -1,0 +1,45 @@
+\ SysTick Registers for LPC824 (Cortex-M0+)
+$E000E010 constant SYSTICK_CSR   \ Control and Status Register
+$E000E014 constant SYSTICK_RVR   \ Reload Value Register
+$E000E018 constant SYSTICK_CVR   \ Current Value Register
+
+\ 延遲特定的 Cycle 數 (最大約 16,000,000 cycles, 12MHz下約 1.3秒)
+: delay-cycles ( cycles -- )
+  \ 1. 停止 SysTick (寫入 0 到 CSR)
+  0 SYSTICK_CSR !
+  
+  \ 2. 設定倒數值 (Reload Value)
+  SYSTICK_RVR !
+  
+  \ 3. 清除當前計數值 (寫入任意值到 CVR 會清為 0)
+  0 SYSTICK_CVR !
+  
+  \ 4. 啟動 SysTick
+  \ Bit 0 = ENABLE (啟動)
+  \ Bit 2 = CLKSOURCE (1 = Processor Clock, 0 = External Reference)
+  \ 我們寫入 5 (二進制 101) 代表使用 CPU Clock 並且啟動
+  5 SYSTICK_CSR !
+  
+  \ 5. 等待時間到
+  \ SysTick 倒數到 0 時，CSR 的 Bit 16 (COUNTFLAG) 會變成 1
+  begin
+    SYSTICK_CSR @ $10000 and \ 檢查 Bit 16
+  until
+  
+  \ 6. 關閉 SysTick (省電)
+  0 SYSTICK_CSR !
+;
+
+\ 毫秒延遲函數 (針對 30MHz 時脈計算)
+\ 1 ms = 30,000 cycles
+: ms ( u -- )
+  0 ?do 
+    30000 delay-cycles 
+  loop 
+;
+
+\ 初始化 (SysTick 不需要像 DWT 那樣特別解鎖，此函式留空或是用來重置)
+: init-timer ( -- )
+  0 SYSTICK_CSR !
+;
+
