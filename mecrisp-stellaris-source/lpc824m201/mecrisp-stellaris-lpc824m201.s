@@ -77,7 +77,7 @@ Reset: @ Einsprung zu Beginn
    @ Catch the pointers for Flash dictionary
    .include "../common/catchflashpointers.s"
 
-   welcome " with M0 core for LPC824M201(12Mhz IRC) by wenij"
+   welcome " with M0 core for LPC824M201(30Mhz IRC) by wenij"
 
    @ Ready to fly !
    .include "../common/boot.s"

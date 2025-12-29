@@ -1,0 +1,54 @@
+\ --------------------------------------------------------
+\ 1. 硬體常數定義 (LPC824 Fast GPIO)
+\ --------------------------------------------------------
+$A0002000 constant FGPIO-DIR  \ 方向暫存器
+$A0002300 constant FGPIO-NOT  \ 翻轉暫存器
+\ 假設測試腳位為 PIO0_12 (請依需求修改)
+$00000001 constant PIN-MASK   \ (1 << 12)
+
+\ --------------------------------------------------------
+\ 2. 初始化 (標準 Forth)
+\ --------------------------------------------------------
+: init-gpio ( -- )
+  \ 設定方向為 Output
+  FGPIO-DIR @ PIN-MASK or FGPIO-DIR !
+  ." GPIO Initialized for Fast I/O toggle." cr
+;
+
+\ --------------------------------------------------------
+\ 3. 極速翻轉迴圈 (Assembler Style)
+\ --------------------------------------------------------
+\ 注意：這是一個無窮迴圈，執行後需 Reset 才能停止
+: test-15mhz ( -- )
+  \ [分析] 參考 source 8 的 ldr= 用法載入 32bit 硬體位址
+  ldr= r0 FGPIO-NOT   \ r0 = 翻轉暫存器位址
+  ldr= r1 PIN-MASK    \ r1 = 要翻轉的 Bit Mask
+
+  \ [分析] 參考 source 7 的 l-: 定義迴圈起點
+  l-:
+    \ [分析] 參考 source 8 的 str 語法: str src base #offset
+    \ 每個 str 指令在 Fast I/O 上耗時 1 cycle
+    \ 連續兩次 str = High + Low = 2 cycles = 15MHz (@30MHz CPU)
+    
+    str r1 r0 #0  \ Toggle 1
+    str r1 r0 #0  \ Toggle 2
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    
+    \ 展開更多次以減少 Jump 造成的 Jitter
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+    str r1 r0 #0
+
+    \ [分析] 參考 source 7 的 b - 跳回上一個 l-:
+    b - 
+;
