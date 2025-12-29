@@ -17,7 +17,7 @@ $(TARGET_BIN):
 release: $(TARGET_BIN) mecrisp-stellaris-$(TARGET_MCU)-with-disassembler.bin
 	python3 add_checksum.py $(basename $<)-with-disassembler.bin
 
-mecrisp-stellaris-$(TARGET_MCU)-with-disassembler.bin: $(TARGET_BIN)
+mecrisp-stellaris-$(TARGET_MCU)-with-disassembler.bin: $(TARGET_BIN) ../thumbulator/thumbulator-lpc845m301
 	cat $(ADD_ON_FS)  > include.txt
 	./buildcore ../thumbulator/thumbulator-lpc845m301 $< include.txt $(basename $<)-with-disassembler.bin
 
