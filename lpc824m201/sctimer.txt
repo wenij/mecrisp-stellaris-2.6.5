@@ -1,0 +1,91 @@
+\ --- LPC82x SCTimer Hardware Addresses ---
+$50004000 constant SCT-BASE
+
+\ Offsets (根據 User Manual)
+0 constant SCT-CONFIG
+4 constant SCT-CTRL
+64 constant SCT-COUNT   \ 0x40 = 64 (Unified 32-bit Counter)
+
+\ System Control Addresses
+$40048080 constant SYSAHBCLKCTRL
+$40048088 constant PRESETCTRL
+
+: sct-init ( -- )
+  \ 1. 開啟 Clock: SYSAHBCLKCTRL (0x40048080) Bit 8
+  ldr= r0 SYSAHBCLKCTRL
+  ldr r1 r0 #0    \ 讀取目前值
+  movs r2 #1
+  lsls r2 r2 #8   \ r2 = 0x100 (Bit 8)
+  orrs r1 r2      \ Set Bit 8
+  str r1 r0 #0    \ 寫回
+
+  \ 2. 解除 Reset: PRESETCTRL (0x40048088) Bit 8
+  ldr= r0 PRESETCTRL
+  ldr r1 r0 #0
+  orrs r1 r2      \ r2 還是 0x100 (Bit 8), 重用
+  str r1 r0 #0
+
+  \ 3. 設定 Config: SCT-BASE + 0x00 (Unified 32-bit mode)
+  ldr= r0 SCT-BASE
+  movs r1 #1      \ Value 1 = Unified 32-bit
+  str r1 r0 #0    \ 寫入 SCT-CONFIG (Offset 0)
+
+  \ 4. 預設 Halt: SCT-BASE + 0x04 (CTRL)
+  \ 寫入 4 (Bit 2 = Halt_L)
+  movs r1 #4
+  str r1 r0 #4    \ 寫入 SCT-CTRL (Offset 4)
+;
+
+: sct@ ( -- u )
+  \ 1. 把目前的 TOS (r6) 推入堆疊 (模擬 Forth 的 dup/push 動作)
+  subs r7 #4      \ 堆疊指標向下
+  str tos r7 #0   \ 把舊的 TOS 存入堆疊
+
+  \ 2. 讀取 SCT Count
+  ldr= r0 SCT-BASE
+  ldr tos r0 #64  \ 讀取 Offset 0x40 (64) 到 TOS
+  
+  \ 不需要寫 bx lr，因為 ":" 定義結束時 Forth 會自動補上 exit
+;
+
+: sct-start ( -- )
+  ldr= r0 SCT-BASE
+  ldr r1 r0 #4    \ 讀取 SCT-CTRL (Offset 4)
+  
+  movs r2 #4      \ Bit 2 mask
+  bics r1 r2      \ 清除 Bit 2 (Halt) -> 變成 Running
+  
+  str r1 r0 #4    \ 寫回
+;
+
+: sct-stop ( -- )
+  ldr= r0 SCT-BASE
+  ldr r1 r0 #4
+  
+  movs r2 #4      \ Bit 2 mask
+  orrs r1 r2      \ 設定 Bit 2 (Halt)
+  
+  str r1 r0 #4
+;
+
+: sct-clr ( -- )
+  ldr= r0 SCT-BASE
+  ldr r1 r0 #4
+  
+  movs r2 #8      \ Bit 3 mask (Clear Counter)
+  orrs r1 r2      \ Set Clear bit
+  str r1 r0 #4    \ 寫入 -> Counter 歸零
+  
+  bics r1 r2      \ Clear Clear bit (否則會一直歸零)
+  str r1 r0 #4    \ 寫入
+;
+\ --------------- test code ---------------
+\ 初始化
+sct-init
+
+\ 測試：歸零 -> 啟動 -> 延遲 -> 停止 -> 讀取
+sct-clr
+sct-start
+100 ms     \ 讓 Forth 延遲一下
+sct-stop
+sct@ .     \ 印出計數值

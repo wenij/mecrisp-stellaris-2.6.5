@@ -1,0 +1,159 @@
+\ --- LPC82x Fast GPIO Addresses ---
+\ Base: 0xA0000000
+\ SET : Base + 0x2200 (寫入 1 變 High)
+\ CLR : Base + 0x2280 (寫入 1 變 Low)
+
+$A0002000 constant FGPIO-DIR
+$A0002200 constant FGPIO-SET
+$A0002280 constant FGPIO-CLR
+
+\ 請設定您的 LED 腳位 (範例用 PIO0_16)
+16 constant LED-PIN
+1 LED-PIN lshift constant LED-MASK
+
+\ 用 ASM 產生一個 PWM 波形週期
+\ Stack: ( mask width period -- )
+: pwm-cycle 
+  \ --- 1. 參數載入 (LDR 語法修正) ---
+  ldr r3 r7 #0    \ r3 = width
+  ldr r2 r7 #4    \ r2 = mask
+  
+  \ 計算 off-time = period (r6) - width (r3)
+  subs r6 r6 r3   
+  
+  \ 丟棄堆疊上的 2 個參數
+  adds r7 #8      
+  
+  \ 準備 GPIO 位址 (LDR= 語法修正)
+  ldr= r0 FGPIO-SET
+  ldr= r1 FGPIO-CLR
+  
+  \ --- 2. 點亮 LED ---
+  str r2 r0 #0    \ Set High
+  
+  \ --- 3. 延遲 (Width Loop) ---
+  cmp r3 #0
+  beq +           \ 如果 0 就跳到 l+: (forward jump)
+  
+  l-:             \ Loop Start (backward target)
+    subs r3 #1
+  bne -           \ 跳回 l-:
+  
+  l+:             \ Loop End (forward target)
+  
+  \ --- 4. 熄滅 LED ---
+  str r2 r1 #0    \ Set Low
+  
+  \ --- 5. 延遲 (Off-time Loop) ---
+  cmp r6 #0
+  beq +           \ 如果 0 就跳到 l+:
+  
+  l-:             \ 重新定義 Loop Start (Mecrisp 允許重複使用 l-:)
+    subs r6 #1
+  bne -           \ 跳回最近的 l-:
+  
+  l+:             \ Loop End
+  
+  \ --- 6. [關鍵] 恢復 Forth 堆疊 ---
+  \ 補回 TOS (Top Of Stack) 到 r6，防止當機
+  ldr r6 r7 #0    
+  adds r7 #4      
+;
+
+\ 初始化 GPIO
+: init-led ( -- )
+  \ 設定方向暫存器 (DIR)
+  FGPIO-DIR @ LED-MASK or FGPIO-DIR !
+  ." LED Initialized." cr
+;
+
+\ 呼吸燈主程式
+\ period 建議值: 1000 ~ 5000 (數值越大，頻率越低但解析度越高)
+\ speed  建議值: 1 ~ 10 (每個亮度要重複幾次，數值越大呼吸越慢)
+
+\ 定義全域變數以簡化堆疊操作
+0 variable pwm-p  \ 儲存 period
+0 variable pwm-s  \ 儲存 speed
+
+: hold-breath ( width duration -- )
+  0 do
+    \ 參數準備: mask width period
+    LED-MASK
+    over      \ 複製 width
+    pwm-p @   \ period
+    pwm-cycle \ 執行一個 PWM 週期
+    
+    \ 檢查按鍵 (這很重要，否則閉氣時會無法退出)
+    key? if key drop unloop unloop exit then
+  loop
+  drop \ 丟棄用完的 width
+;
+
+: breathe ( period speed -- )
+  pwm-s !
+  pwm-p !
+  
+  init-led
+  
+  \ 清空緩衝區
+  begin key? while key drop repeat
+
+  begin
+    \ ============================
+    \ 階段 1: 吸氣 (Fade In) - 較快
+    \ ============================
+    pwm-p @ 1 do
+       \ 吸氣速度: 使用基礎速度 pwm-s @
+       pwm-s @ 0 do
+         LED-MASK
+         
+         \ Gamma Curve: (j * j) / period
+         j dup * pwm-p @ / 
+         
+         pwm-p @
+         pwm-cycle
+         
+         key? if key drop unloop unloop exit then
+       loop
+    loop
+    
+    \ ============================
+    \ 階段 2: 憋氣 (Hold Top) - 停留在最亮
+    \ ============================
+    \ 亮度: pwm-p @ (全亮)
+    \ 時間: 200 次循環 (約 0.5 秒)
+    pwm-p @  200  hold-breath
+
+    \ ============================
+    \ 階段 3: 吐氣 (Fade Out) - 較慢 (放鬆)
+    \ ============================
+    pwm-p @ 1 do
+       \ 吐氣速度: 讓它比吸氣慢 1.5 倍 (pwm-s * 3 / 2)
+       \ 這裡簡單用 pwm-s * 2 (兩倍慢)
+       pwm-s @ 2 * 0 do
+         LED-MASK
+         
+         \ Gamma Curve: ((period-j)^2) / period
+         pwm-p @ j - 
+         dup * pwm-p @ / 
+         
+         pwm-p @
+         pwm-cycle
+         
+         key? if key drop unloop unloop exit then
+       loop
+    loop
+    
+    \ ============================
+    \ 階段 4: 休息 (Hold Bottom) - 停留在全暗
+    \ ============================
+    \ 亮度: 0 (全暗)
+    \ 時間: 500 次循環 (休息久一點，約 1 秒)
+    0  500  hold-breath
+    
+  again
+;
+
+\ test code
+\ 參數說明: 2000 (PWM解析度/週期), 5 (呼吸速度/平滑度)
+2000 5 breathe
