@@ -4,8 +4,10 @@ TARGET_MCU = lpc824m201
 TARGET_BIN = mecrisp-stellaris-$(TARGET_MCU).bin
 PROG_TOOL = lpc21isp/lpc21isp
 ADD_ON_FS = ../common/disassembler-m0.txt 
-ADD_ON_FS += ../common/assembler-m0.txt 
+#ADD_ON_FS += ../common/assembler-m0.txt 
+ADD_ON_FS += ../common/ansification.txt
 ADD_ON_FS += dump.txt delay.txt
+#ADD_ON_FS += lcd-sh1106-demo.txt
 
 all: release
 
